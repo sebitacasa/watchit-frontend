@@ -130,52 +130,64 @@ useEffect(() => {
 
 
   return (
- <div className="flex flex-col min-h-screen bg-neutral-900 text-white">
-      <div className="flex flex-1 lg:flex-row flex-col">
-        {/* Panel izquierdo */}
-        <div className="flex-1 flex flex-col p-4">
-          <div className="mb-4 flex gap-2">
-            <input
-              type="text"
-              placeholder="Pega el link de YouTube..."
-              className="flex-1 px-3 py-2 rounded bg-neutral-700 text-white placeholder-gray-400 outline-none"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <button
-              onClick={handleSearch}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition"
-            >
-              Buscar
-            </button>
-          </div>
-          <h2 className="text-2xl font-semibold mb-4">Sala: {roomId}</h2>
-          <div className="flex-grow flex items-center justify-center min-h-[300px]">
-            <VideoPlayer
-              videoId={videoId}
-              playerRef={playerRef}
-              onEvent={(type, currentTime) => {
-                socket.emit('video-event', { roomId, type, currentTime });
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Panel derecho (Chat) */}
-        {user && (
-          <div className="lg:w-[350px] w-full bg-neutral-800 p-4 border-l border-white/10 shadow-inner">
-            <Chat roomId={roomId} user={user} />
-          </div>
-        )}
+ <div className="flex flex-col min-h-screen bg-neutral-900 text-white pt-safe pb-safe">
+  <div className="flex flex-1 lg:flex-row flex-col">
+    
+    {/* Panel izquierdo */}
+    <div className="flex-1 flex flex-col p-4">
+      
+      {/* Buscador */}
+      <div className="mb-4 flex gap-2">
+        <input
+          type="text"
+          placeholder="Pega el link de YouTube..."
+          className="flex-1 px-3 py-2 rounded bg-neutral-700 text-white placeholder-gray-400 outline-none"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+        <button
+          onClick={handleSearch}
+          className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition"
+        >
+          Buscar
+        </button>
       </div>
-        <div className="mt-4 max-h-[400px] overflow-y-auto">
-  <SearchResults videoId={videoId} setVideoId={setVideoId}  roomId={roomId} />
+
+      <h2 className="text-2xl font-semibold mb-4">Room: {roomId}</h2>
+
+      {/* Reproductor */}
+      <div className="flex-grow flex items-center justify-center min-h-[300px]">
+        <VideoPlayer
+          videoId={videoId}
+          playerRef={playerRef}
+          onEvent={(type, currentTime) => {
+            socket.emit('video-event', { roomId, type, currentTime });
+          }}
+        />
+      </div>
+
+      {/* Resultados de búsqueda */}
+      <div className="mt-4 max-h-[300px] overflow-y-auto">
+        <SearchResults
+          videoId={videoId}
+          setVideoId={setVideoId}
+          roomId={roomId}
+        />
+      </div>
+    </div>
+
+    {/* Panel derecho (Chat) */}
+    {user && (
+      <div className="lg:w-[350px] w-full bg-neutral-800 p-4 border-l border-white/10 shadow-inner flex flex-col">
+        <Chat roomId={roomId} user={user} />
+      </div>
+    )}
+  </div>
+
+  {/* Footer */}
+  <Footer />
 </div>
 
-      {/* Footer */}
-        
-      <Footer />
-    </div>
   );
 }
 
