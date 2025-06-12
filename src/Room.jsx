@@ -4,26 +4,61 @@ import socket from './socket';
 import VideoPlayer from './VideoPlayer';
 import Chat from './Chat';
 import Footer from './Footer';
+import { getVideoByName } from './redux/actions';
+import {useDispatch} from "react-redux";
+import SearchResults from './videosResult';
 
 function Room() {
+  const dispatch = useDispatch()
   const { roomId } = useParams();
   const [user, setUser] = useState('');
   const playerRef = useRef(null);
   const [videoId, setVideoId] = useState('dQw4w9WgXcQ');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const extractVideoId = (url) => {
-     const regex = /(?:youtube\.com\/.*v=|youtu\.be\/)([^&?/]+)/;
-     const match = url.match(regex);
-     return match ? match[1] : null;
-   };
-  const handleSearch = () => {
-   const idFromUrl = extractVideoId(searchTerm);
-  if (idFromUrl && idFromUrl.length === 11) {
-    setVideoId(idFromUrl);
-    socket.emit('change-video', { roomId, videoId: idFromUrl });
+  
+  
+  const handleSearch = (e) => {
+  e.preventDefault();
+
+  const isYouTubeLink = searchTerm.includes('youtube.com') || searchTerm.includes('youtu.be');
+
+  if (isYouTubeLink) {
+    const idFromUrl = extractVideoId(searchTerm);
+    if (idFromUrl && idFromUrl.length === 11) {
+      setVideoId(idFromUrl);
+      socket.emit('change-video', { roomId, videoId: idFromUrl });
+      dispatch(getVideoByName(idFromUrl)); // Si querés guardar también en Redux
+    } else {
+      console.warn("Link inválido o sin video ID.");
+    }
+  } else {
+    dispatch(getVideoByName(searchTerm)); // Búsqueda por nombre de canción o banda
   }
-  }
+};
+
+    const extractVideoId = (url) => {
+       const regex = /(?:youtube\.com\/.*v=|youtu\.be\/)([^&?/]+)/;
+       const match = url.match(regex);
+       return match ? match[1] : null;
+     };
+  
+
+ 
+
+  // function handleInputChange(e) {
+  //   e.preventDefault(e);
+  //   setVideoName(e.target.value);
+  //   setSearchTerm("");
+  // }
+
+  // const handleSearch = (e) => { 
+  //   e.preventDefault()
+  //   dispatch(getVideoByName(videoName))
+  //   setVideoName(searchTerm);
+  //   socket.emit('change-video', { roomId, videoId: vi });
+  
+  // }
   // Manejar eventos de video sincronizado
   const handleVideoEvent = ({ type, currentTime }) => {
   const player = playerRef.current;
@@ -133,8 +168,12 @@ useEffect(() => {
           </div>
         )}
       </div>
+        <div className="mt-4 max-h-[400px] overflow-y-auto">
+  <SearchResults videoId={videoId} setVideoId={setVideoId}  roomId={roomId} />
+</div>
 
       {/* Footer */}
+        
       <Footer />
     </div>
   );
