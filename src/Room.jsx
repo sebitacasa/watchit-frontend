@@ -167,7 +167,7 @@ useEffect(() => {
       </div>
 
       {/* Resultados de búsqueda */}
-      <div className="mt-4 max-h-[300px] overflow-y-auto">
+   <div className="mt-4 max-h-[300px] overflow-y-auto bg-red-500 text-black">
         <SearchResults
           videoId={videoId}
           setVideoId={setVideoId}
