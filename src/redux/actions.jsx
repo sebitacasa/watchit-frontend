@@ -4,7 +4,7 @@ import axios from "axios"
 export function getVideoByName(searchQuery){
     return async (dispatch) => {
         
-          const res = await axios.get('http://localhost:3001/youtube-search', {
+          const res = await axios.get('https://watchit-backend-2hhk.onrender.com/youtube-search', {
         params: { searchQuery }
       });
 
