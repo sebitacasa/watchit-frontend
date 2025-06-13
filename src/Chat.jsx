@@ -50,7 +50,7 @@ function Chat({ roomId, user }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Escribe un mensaje..."
+          placeholder="Start chat..."
           className="flex-1 px-3 py-2 rounded bg-neutral-600 text-white placeholder-gray-400 outline-none"
         />
         <button

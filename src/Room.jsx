@@ -140,7 +140,7 @@ useEffect(() => {
       <div className="mb-4 flex gap-2">
         <input
           type="text"
-          placeholder="Pega el link de YouTube..."
+          placeholder="Search on YouTube..."
           className="flex-1 px-3 py-2 rounded bg-neutral-700 text-white placeholder-gray-400 outline-none"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -167,7 +167,7 @@ useEffect(() => {
       </div>
 
       {/* Resultados de búsqueda */}
-   <div className="mt-4 max-h-[300px] overflow-y-auto text-black">
+   <div className="mt-4 max-h-[300px] overflow-y-auto text-white">
         <SearchResults
           videoId={videoId}
           setVideoId={setVideoId}

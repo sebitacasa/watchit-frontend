@@ -16,27 +16,37 @@ function Home() {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '400px', margin: 'auto', textAlign: 'center' }}>
-      <h1>🎬 Bienvenido a WatchItTogether</h1>
-      <h1 className="text-3xl font-bold text-blue-400">Tailwind funciona 💥</h1>
-      <input
-        type="text"
-        placeholder="Tu nombre"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        style={{ width: '100%', margin: '1rem 0', padding: '0.5rem' }}
-      />
-      <input
-        type="text"
-        placeholder="ID de sala"
-        value={roomId}
-        onChange={(e) => setRoomId(e.target.value)}
-        style={{ width: '100%', marginBottom: '1rem', padding: '0.5rem' }}
-      />
-      <button onClick={handleJoin} style={{ width: '100%', padding: '0.75rem' }}>
-        Entrar
-      </button>
-    </div>
+    <div className="flex flex-col min-h-screen bg-neutral-900 text-white pt-safe pb-safe">
+  <div className="p-8 max-w-[400px] mx-auto text-center bg-neutral-900">
+    
+    <h1 className="text-3xl font-bold text-blue-400 mb-6">Welcome to WatchItTogether 🎬</h1>
+
+    <input
+      type="text"
+      placeholder="Your name"
+      value={username}
+      onChange={(e) => setUsername(e.target.value)}
+      className="w-full mb-4 px-4 py-2 bg-neutral-800 text-white placeholder-gray-400 rounded outline-none"
+    />
+
+    <input
+      type="text"
+      placeholder="Room ID"
+      value={roomId}
+      onChange={(e) => setRoomId(e.target.value)}
+      className="w-full mb-6 px-4 py-2 bg-neutral-800 text-white placeholder-gray-400 rounded outline-none"
+    />
+
+    <button
+      onClick={handleJoin}
+      className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition"
+    >
+      Enter
+    </button>
+  </div>
+</div>
+
+    
   );
 }
 
