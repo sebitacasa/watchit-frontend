@@ -7,8 +7,8 @@ export function getVideoByName(searchQuery) {
       // 1. Llamada al Backend
       // NOTA: Asegúrate de que tu backend espere 'searchQuery'. 
       // Si tu backend usa 'q', cambia abajo a: params: { q: searchQuery }
-      const res = await axios.get('https://watchit-backend-2hhk.onrender.com/youtube-search', {
-        params: { searchQuery } 
+        const res = await axios.get('https://watchit-backend-2hhk.onrender.com/youtube-search', {
+        params: { q: searchQuery }
       });
 
       console.log("Respuesta cruda del Backend:", res.data);

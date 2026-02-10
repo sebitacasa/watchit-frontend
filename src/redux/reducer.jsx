@@ -1,14 +1,16 @@
+import { SEARCHVIDEOS } from "./actions";
+
 const initialState = {
-  videos: [], // Aquí se guardarán los resultados
-  // ...otros estados
+  videos: [], // <--- IMPORTANTE: Tiene que llamarse 'videos' y ser un array
+  // ... otros estados
 };
 
 function rootReducer(state = initialState, action) {
   switch (action.type) {
-    case "GET_VIDEO_BY_NAME":
+    case SEARCHVIDEOS:
       return {
         ...state,
-        videos: action.payload, // Actualizamos la lista
+        videos: action.payload, // Guardamos la lista limpia aquí
       };
     default:
       return state;

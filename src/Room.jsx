@@ -5,9 +5,9 @@ import VideoPlayer from './VideoPlayer';
 import Chat from './Chat';
 import Footer from './Footer';
 import { useDispatch } from "react-redux";
-import { getVideoByName } from './redux/actions'; // Asegúrate de tener esta acción
+import { getVideoByName } from './redux/actions'; 
 import SearchResults from './videosResult';
-import { Search, MonitorPlay, MessageSquare, Users, Tv, Share2 } from 'lucide-react';
+import { Search, MonitorPlay, MessageSquare, Users, Tv } from 'lucide-react';
 
 function Room() {
   const dispatch = useDispatch();
@@ -38,17 +38,30 @@ function Room() {
       const idFromUrl = extractVideoId(searchTerm);
       if (idFromUrl && idFromUrl.length === 11) {
         setVideoId(idFromUrl);
-        setIsSynced(true); // Si yo lo cambio, asumo que estoy sincronizado
+        setIsSynced(true); 
         socket.emit('change-video', { roomId, videoId: idFromUrl });
-        setSearchTerm(''); // Limpiar barra
+        setSearchTerm(''); 
       }
     } else {
-      // Búsqueda por palabras clave (Redux)
       if (searchTerm.trim()) {
         dispatch(getVideoByName(searchTerm));
       }
     }
   };
+
+  // EFECTO DEBOUNCE: Búsqueda en tiempo real mientras escribes
+  useEffect(() => {
+    // Si está vacío o es un link, no buscamos en la API automáticamente
+    if (!searchTerm.trim() || searchTerm.includes('youtube.com')) return;
+
+    // Esperamos 600ms después de que dejes de escribir
+    const delaySearch = setTimeout(() => {
+      console.log("🔍 Auto-searching:", searchTerm);
+      dispatch(getVideoByName(searchTerm));
+    }, 600);
+
+    return () => clearTimeout(delaySearch);
+  }, [searchTerm, dispatch]);
 
   const extractVideoId = (url) => {
     const regex = /(?:youtube\.com\/.*v=|youtu\.be\/)([^&?/]+)/;
@@ -57,15 +70,11 @@ function Room() {
   };
 
   // --- LÓGICA DE SOCKETS Y VIDEO ---
-  
-  // 1. Manejar eventos del reproductor (Play/Pause/Seek)
   const handleVideoEvent = ({ type, currentTime }) => {
     const player = playerRef.current;
     if (!player) return;
 
-    // Si recibo un evento del exterior, ya estoy en sintonía
     setIsSynced(true);
-
     const current = player.getCurrentTime();
     const diff = Math.abs(current - currentTime);
 
@@ -82,19 +91,17 @@ function Room() {
     }
   };
 
-  // 2. Obtener metadatos cuando el video carga
   const handlePlayerReady = (event) => {
     const player = event.target;
+    // Recuperamos título y autor
     if (player.getVideoData) {
       const data = player.getVideoData();
       setVideoTitle(data.title);
       setChannelTitle(data.author);
     }
-    // Si entro y no estoy sincronizado, pido ayuda al servidor
     if (!isSynced) socket.emit('ask-sync', roomId);
   };
 
-  // 3. Detectar cambios de estado para actualizar título
   const handleStateChange = (event) => {
     const player = event.target;
     if (player.getVideoData) {
@@ -104,12 +111,10 @@ function Room() {
     }
   }
 
-  // Effect para mantener referencia del ID actual
   useEffect(() => {
     currentVideoIdRef.current = videoId;
   }, [videoId]);
 
-  // Effect Principal: Conexión y Eventos
   useEffect(() => {
     const handleChangeVideo = ({ videoId }) => {
       if (videoId && videoId !== currentVideoIdRef.current) {
@@ -127,15 +132,12 @@ function Room() {
       if (storedUser) {
         setUser(storedUser);
         socket.emit('join-room', roomId);
-        
-        // Al unirse, pedimos sincronización (Handshake)
         setIsSynced(false);
         socket.emit('ask-sync', roomId);
       }
     };
 
     // --- HANDSHAKE LOGIC ---
-    // A. Alguien nuevo pide la hora (Yo soy el veterano)
     const handleGetTime = (requesterId) => {
       const player = playerRef.current;
       if (player && typeof player.getCurrentTime === 'function') {
@@ -145,19 +147,17 @@ function Room() {
       }
     };
 
-    // B. El servidor me da la hora (Yo soy el nuevo)
     const handleSetTime = ({ time, state }) => {
       const player = playerRef.current;
       if (player) {
-        console.log(`⏱ Sincronizando a ${time}s`);
+        console.log(`⏱ Syncing to ${time}s`);
         player.seekTo(time, true);
         if (state === 1) player.playVideo();
         else player.pauseVideo();
-        setIsSynced(true); // ¡Listo!
+        setIsSynced(true);
       }
     };
 
-    // Listeners
     socket.on('change-video', handleChangeVideo);
     socket.on('video-event', handleVideoEvent);
     socket.on('connect', handleInitUser);
@@ -238,13 +238,12 @@ function Room() {
                     if (isSynced) socket.emit('video-event', { roomId, type, currentTime });
                   }}
                   onReady={handlePlayerReady}
-                  // Pasamos onStateChange para actualizar título si cambia solo
                   onStateChange={handleStateChange} 
                 />
               </div>
             </div>
             
-            {/* Info Video */}
+            {/* Info Video (Título y Estado) */}
             <div className="mt-5 mb-8 px-1">
                 <h2 className="text-xl md:text-2xl font-bold text-white flex items-start gap-3 leading-tight">
                     <Tv size={24} className="text-purple-500 mt-1 flex-shrink-0" />
@@ -252,7 +251,7 @@ function Room() {
                 </h2>
                 <div className="flex items-center gap-4 mt-2 ml-9">
                     <span className="text-sm font-medium text-gray-400">{channelTitle}</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
+                    <span className={`text-xs px-2 py-0.5 rounded border ${isSynced ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'}`}>
                         {isSynced ? 'Synced' : 'Syncing...'}
                     </span>
                 </div>
@@ -270,14 +269,13 @@ function Room() {
             {/* Scroll Horizontal Container */}
             <div className="relative w-full group/scroll">
                 <div className="flex overflow-x-auto pb-6 gap-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent hover:scrollbar-thumb-purple-600/50 transition-colors">
-                  {/* Aquí el SearchResults devuelve fragmentos, por eso usamos flex en el padre */}
                    <SearchResults
                       videoId={videoId}
                       setVideoId={setVideoId}
                       roomId={roomId}
                     />
                 </div>
-                {/* Fade derecho para indicar más contenido */}
+                {/* Fade derecho */}
                 <div className="absolute top-0 right-0 h-full w-16 bg-gradient-to-l from-[#0f0f0f] to-transparent pointer-events-none"></div>
             </div>
           </div>
@@ -304,7 +302,6 @@ function Room() {
               </button>
             </div>
 
-            {/* Componente Chat */}
             <div className="flex-1 overflow-hidden relative bg-[#121212]">
                <Chat roomId={roomId} user={user} />
             </div>
@@ -312,7 +309,6 @@ function Room() {
         )}
       </main>
 
-      {/* Overlay Móvil para cerrar chat al hacer click fuera */}
       {showChatMobile && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 lg:hidden"
@@ -320,7 +316,6 @@ function Room() {
         ></div>
       )}
 
-      {/* Footer (Solo Desktop) */}
       <div className="hidden lg:block border-t border-white/5 bg-[#0f0f0f]">
         <Footer />
       </div>
