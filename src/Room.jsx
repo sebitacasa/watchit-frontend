@@ -13,25 +13,25 @@ function Room() {
   const dispatch = useDispatch();
   const { roomId } = useParams();
   
-  // Traemos los videos del estado global para el auto-scroll
+  // Get videos from global state for auto-scroll
   const videos = useSelector(state => state.videos);
 
-  // Estados de Usuario y Sala
+  // User and Room States
   const [user, setUser] = useState('');
-  const [videoId, setVideoId] = useState(''); // Estado inicial VACÍO (Adiós Rick Astley)
-  const [videoTitle, setVideoTitle] = useState('Sala lista');
-  const [channelTitle, setChannelTitle] = useState('Esperando video...');
+  const [videoId, setVideoId] = useState(''); // Initial state EMPTY
+  const [videoTitle, setVideoTitle] = useState('Room Ready'); // English
+  const [channelTitle, setChannelTitle] = useState('Waiting for video...'); // English
   
-  // Estados de Interfaz
+  // Interface States
   const [searchTerm, setSearchTerm] = useState('');
   const [showChatMobile, setShowChatMobile] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
   
   const playerRef = useRef(null);
   const currentVideoIdRef = useRef(videoId);
-  const resultsRef = useRef(null); // Referencia para el scroll
+  const resultsRef = useRef(null); // Ref for scroll
 
-  // --- LÓGICA DE BÚSQUEDA ---
+  // --- SEARCH LOGIC ---
   const handleSearch = (e) => {
     e.preventDefault();
     const isYouTubeLink = searchTerm.includes('youtube.com') || searchTerm.includes('youtu.be');
@@ -51,7 +51,7 @@ function Room() {
     }
   };
 
-  // EFECTO DEBOUNCE: Búsqueda en tiempo real
+  // DEBOUNCE EFFECT: Real-time search
   useEffect(() => {
     if (!searchTerm.trim() || searchTerm.includes('youtube.com')) return;
 
@@ -63,7 +63,7 @@ function Room() {
     return () => clearTimeout(delaySearch);
   }, [searchTerm, dispatch]);
 
-  // EFECTO AUTO-SCROLL: Baja a los resultados cuando llegan
+  // AUTO-SCROLL EFFECT: Scroll to results when they arrive
   useEffect(() => {
     if (videos && videos.length > 0 && searchTerm.trim() !== '') {
         setTimeout(() => {
@@ -81,7 +81,7 @@ function Room() {
     return match ? match[1] : null;
   };
 
-  // --- LÓGICA DE SOCKETS Y VIDEO ---
+  // --- SOCKETS AND VIDEO LOGIC ---
   const handleVideoEvent = ({ type, currentTime }) => {
     const player = playerRef.current;
     if (!player) return;
@@ -110,7 +110,7 @@ function Room() {
       setVideoTitle(data.title);
       setChannelTitle(data.author);
     }
-    // Si soy nuevo, pido sincronización
+    // If I'm new, ask for sync
     if (!isSynced) socket.emit('ask-sync', roomId);
   };
 
@@ -127,7 +127,7 @@ function Room() {
     currentVideoIdRef.current = videoId;
   }, [videoId]);
 
-  // --- EFECTO PRINCIPAL (SOCKETS) ---
+  // --- MAIN EFFECT (SOCKETS) ---
   useEffect(() => {
     const handleChangeVideo = ({ videoId }) => {
       if (videoId && videoId !== currentVideoIdRef.current) {
@@ -153,13 +153,13 @@ function Room() {
     // --- HANDSHAKE LOGIC ---
     const handleGetTime = (requesterId) => {
       const player = playerRef.current;
-      // Solo respondemos si realmente hay un video cargado
+      // Only respond if a video is actually loaded
       if (player && typeof player.getCurrentTime === 'function' && currentVideoIdRef.current) {
         const time = player.getCurrentTime();
         const state = player.getPlayerState(); 
         const currentVideo = currentVideoIdRef.current;
 
-        console.log(`📤 Enviando sync a ${requesterId}: Video ${currentVideo}`);
+        console.log(`📤 Sending sync to ${requesterId}: Video ${currentVideo}`);
         
         socket.emit('sync-response', { 
           roomId, 
@@ -172,16 +172,14 @@ function Room() {
     };
 
     const handleSetTime = ({ time, state, videoId: incomingVideoId }) => {
-      console.log(`📥 Recibido sync video: ${incomingVideoId}`);
+      console.log(`📥 Received sync video: ${incomingVideoId}`);
       
-      // 1. Si el video es diferente, lo cambiamos
+      // 1. If video is different, change it
       if (incomingVideoId && incomingVideoId !== currentVideoIdRef.current) {
          setVideoId(incomingVideoId);
       }
 
-      // 2. Ajustamos el tiempo (solo si el player ya está listo o se montará)
-      // Nota: Si setVideoId cambia, el player se desmonta y monta. 
-      // El seekTo ocurrirá en el onReady del nuevo player o aquí si ya existía.
+      // 2. Adjust time
       const player = playerRef.current;
       if (player) {
         player.seekTo(time, true);
@@ -219,7 +217,7 @@ function Room() {
           <h1 className="text-xl font-bold tracking-tight text-white hidden sm:block">WatchIt</h1>
         </div>
 
-        {/* Buscador */}
+        {/* Search Bar */}
         <div className="flex-1 max-w-xl mx-4">
           <form onSubmit={handleSearch} className="relative group">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -252,20 +250,20 @@ function Room() {
       {/* --- MAIN LAYOUT --- */}
       <main className="flex-1 flex overflow-hidden relative">
         
-        {/* COLUMNA IZQUIERDA (Video + Resultados) */}
+        {/* LEFT COLUMN (Video + Results) */}
         <div className="flex-1 flex flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
           
-          {/* Contenedor Video */}
+          {/* Video Container */}
           <div className="w-full max-w-6xl mx-auto p-4 lg:p-6 pb-0">
             <div className="relative group w-full aspect-video rounded-xl shadow-2xl bg-black overflow-hidden border border-white/10">
               
-              {/* Fondo del video (Siempre visible) */}
+              {/* Video Background (Always visible) */}
               <div className="absolute inset-0 bg-[#0a0a0a] z-0"></div>
 
-              {/* Contenido Condicional: Video Player vs Placeholder */}
+              {/* Conditional Content: Video Player vs Placeholder */}
               <div className="relative w-full h-full z-10">
                 {videoId ? (
-                    /* SI HAY VIDEO: Renderizamos el Player */
+                    /* IF VIDEO EXISTS: Render Player */
                     <>
                         <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl blur-2xl opacity-20 group-hover:opacity-30 transition duration-1000 pointer-events-none"></div>
                         <VideoPlayer
@@ -280,25 +278,25 @@ function Room() {
                         />
                     </>
                 ) : (
-                    /* NO HAY VIDEO: Renderizamos Placeholder */
+                    /* NO VIDEO: Render Placeholder */
                     <div className="flex flex-col items-center justify-center h-full w-full text-gray-500 bg-[#0a0a0a]">
                         <div className="p-6 bg-white/5 rounded-full mb-6 animate-pulse ring-1 ring-white/10">
                              <Play size={48} className="text-purple-500 ml-1" fill="currentColor" />
                         </div>
-                        <h3 className="text-2xl font-bold text-gray-200 tracking-tight">La sala está lista</h3>
+                        <h3 className="text-2xl font-bold text-gray-200 tracking-tight">The room is ready</h3>
                         <p className="text-sm mt-3 text-gray-400 max-w-xs text-center leading-relaxed">
-                            Usa la barra de búsqueda superior para encontrar un video o pega un link de YouTube.
+                            Use the search bar above to find a video or paste a YouTube link.
                         </p>
                     </div>
                 )}
               </div>
             </div>
             
-            {/* Info Video (Título y Estado) */}
+            {/* Video Info (Title and Status) */}
             <div className="mt-5 mb-8 px-1">
                 <h2 className="text-xl md:text-2xl font-bold text-white flex items-start gap-3 leading-tight">
                     <Tv size={24} className={`mt-1 flex-shrink-0 ${videoId ? 'text-purple-500' : 'text-gray-600'}`} />
-                    {videoId ? videoTitle : 'Sin video seleccionado'}
+                    {videoId ? videoTitle : 'No video selected'}
                 </h2>
                 {videoId && (
                     <div className="flex items-center gap-4 mt-2 ml-9">
@@ -311,16 +309,16 @@ function Room() {
             </div>
           </div>
 
-          {/* Carrusel de Resultados (CON REF PARA SCROLL) */}
+          {/* Results Carousel (WITH REF FOR SCROLL) */}
           <div 
             ref={resultsRef} 
             className="w-full max-w-6xl mx-auto px-4 lg:px-6 pb-12 scroll-mt-24" 
           >
-            {/* Solo mostramos el título si hay resultados */}
+            {/* Only show title if there are results */}
             {videos && videos.length > 0 && (
                 <div className="flex items-center justify-between mb-4 animate-fade-in">
                     <h3 className="text-lg font-semibold text-gray-200 border-l-4 border-purple-500 pl-3">
-                    Resultados de búsqueda
+                    Search Results
                     </h3>
                 </div>
             )}
@@ -333,13 +331,13 @@ function Room() {
                       roomId={roomId}
                     />
                 </div>
-                {/* Fade solo si hay contenido que desborda (visual) */}
+                {/* Fade only if there is overflowing content (visual) */}
                 <div className="absolute top-0 right-0 h-full w-16 bg-gradient-to-l from-[#0f0f0f] to-transparent pointer-events-none"></div>
             </div>
           </div>
         </div>
 
-        {/* COLUMNA DERECHA (Chat) */}
+        {/* RIGHT COLUMN (Chat) */}
         {user && (
           <div className={`
             fixed inset-y-0 right-0 w-80 bg-[#151515] border-l border-white/10 transform transition-transform duration-300 z-30 shadow-2xl

@@ -26,10 +26,10 @@ export default defineConfig({
             purpose: 'any maskable'
           },
           {
-            src: '/pwa-512x512.png', // Y esta también
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
+           src: 'icon.svg', 
+            sizes: '192x192 512x512', // Sirve para ambos tamaños
+            type: 'image/svg+xml',
+          purpose: 'any maskable'
           }
         ]
       }
