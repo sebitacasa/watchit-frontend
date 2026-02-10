@@ -4,7 +4,7 @@ import socket from './socket';
 import VideoPlayer from './VideoPlayer';
 import Chat from './Chat';
 import Footer from './Footer';
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux"; // 1. Importamos useSelector
 import { getVideoByName } from './redux/actions'; 
 import SearchResults from './videosResult';
 import { Search, MonitorPlay, MessageSquare, Users, Tv } from 'lucide-react';
@@ -13,21 +13,25 @@ function Room() {
   const dispatch = useDispatch();
   const { roomId } = useParams();
   
+  // 2. Traemos los videos del estado global para saber cuándo llegan
+  const videos = useSelector(state => state.videos);
+
   // Estados de Usuario y Sala
   const [user, setUser] = useState('');
-  const [videoId, setVideoId] = useState('dQw4w9WgXcQ'); // Rick Roll por defecto ;)
+  const [videoId, setVideoId] = useState('dQw4w9WgXcQ'); 
   const [videoTitle, setVideoTitle] = useState('Cargando video...');
   const [channelTitle, setChannelTitle] = useState('');
   
   // Estados de Interfaz
   const [searchTerm, setSearchTerm] = useState('');
   const [showChatMobile, setShowChatMobile] = useState(false);
-  
-  // Estado Crítico de Sincronización
   const [isSynced, setIsSynced] = useState(false);
   
   const playerRef = useRef(null);
-  const currentVideoIdRef = useRef('');
+  const currentVideoIdRef = useRef(videoId);
+  
+  // 3. Referencia para el Scroll automático
+  const resultsRef = useRef(null);
 
   // --- LÓGICA DE BÚSQUEDA ---
   const handleSearch = (e) => {
@@ -49,12 +53,10 @@ function Room() {
     }
   };
 
-  // EFECTO DEBOUNCE: Búsqueda en tiempo real mientras escribes
+  // EFECTO DEBOUNCE: Búsqueda en tiempo real
   useEffect(() => {
-    // Si está vacío o es un link, no buscamos en la API automáticamente
     if (!searchTerm.trim() || searchTerm.includes('youtube.com')) return;
 
-    // Esperamos 600ms después de que dejes de escribir
     const delaySearch = setTimeout(() => {
       console.log("🔍 Auto-searching:", searchTerm);
       dispatch(getVideoByName(searchTerm));
@@ -62,6 +64,21 @@ function Room() {
 
     return () => clearTimeout(delaySearch);
   }, [searchTerm, dispatch]);
+
+  // 4. NUEVO EFECTO: Auto-Scroll cuando llegan resultados
+  useEffect(() => {
+    // Si hay videos en la lista Y el usuario escribió algo en el buscador
+    if (videos && videos.length > 0 && searchTerm.trim() !== '') {
+        console.log("📜 Scrolling to results...");
+        // Pequeño timeout para dar tiempo a que el DOM pinte las tarjetas
+        setTimeout(() => {
+            resultsRef.current?.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' // Centra el carrusel en la pantalla
+            });
+        }, 100);
+    }
+  }, [videos]); // Se dispara cada vez que cambia la lista de videos
 
   const extractVideoId = (url) => {
     const regex = /(?:youtube\.com\/.*v=|youtu\.be\/)([^&?/]+)/;
@@ -93,7 +110,6 @@ function Room() {
 
   const handlePlayerReady = (event) => {
     const player = event.target;
-    // Recuperamos título y autor
     if (player.getVideoData) {
       const data = player.getVideoData();
       setVideoTitle(data.title);
@@ -115,6 +131,7 @@ function Room() {
     currentVideoIdRef.current = videoId;
   }, [videoId]);
 
+  // --- EFECTO PRINCIPAL (SOCKETS) ---
   useEffect(() => {
     const handleChangeVideo = ({ videoId }) => {
       if (videoId && videoId !== currentVideoIdRef.current) {
@@ -143,14 +160,26 @@ function Room() {
       if (player && typeof player.getCurrentTime === 'function') {
         const time = player.getCurrentTime();
         const state = player.getPlayerState(); 
-        socket.emit('sync-response', { roomId, requesterId, time, state });
+        const currentVideo = currentVideoIdRef.current;
+
+        console.log(`📤 Enviando sync a ${requesterId}`);
+        socket.emit('sync-response', { 
+          roomId, 
+          requesterId, 
+          time, 
+          state,
+          videoId: currentVideo 
+        });
       }
     };
 
-    const handleSetTime = ({ time, state }) => {
+    const handleSetTime = ({ time, state, videoId: incomingVideoId }) => {
+      console.log(`📥 Recibido sync video: ${incomingVideoId}`);
+      if (incomingVideoId && incomingVideoId !== currentVideoIdRef.current) {
+         setVideoId(incomingVideoId);
+      }
       const player = playerRef.current;
       if (player) {
-        console.log(`⏱ Syncing to ${time}s`);
         player.seekTo(time, true);
         if (state === 1) player.playVideo();
         else player.pauseVideo();
@@ -224,11 +253,8 @@ function Room() {
           
           {/* Contenedor Video */}
           <div className="w-full max-w-6xl mx-auto p-4 lg:p-6 pb-0">
-            {/* Aspect Ratio Container */}
             <div className="relative group w-full aspect-video rounded-xl shadow-2xl bg-black overflow-hidden border border-white/10">
-               {/* Glow Effect */}
               <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl blur-2xl opacity-20 group-hover:opacity-30 transition duration-1000"></div>
-              
               <div className="relative w-full h-full z-10">
                 <VideoPlayer
                   videoId={videoId}
@@ -243,7 +269,6 @@ function Room() {
               </div>
             </div>
             
-            {/* Info Video (Título y Estado) */}
             <div className="mt-5 mb-8 px-1">
                 <h2 className="text-xl md:text-2xl font-bold text-white flex items-start gap-3 leading-tight">
                     <Tv size={24} className="text-purple-500 mt-1 flex-shrink-0" />
@@ -258,15 +283,17 @@ function Room() {
             </div>
           </div>
 
-          {/* Carrusel de Resultados */}
-          <div className="w-full max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+          {/* Carrusel de Resultados (CON REF PARA SCROLL) */}
+          <div 
+            ref={resultsRef} // 5. Aquí asignamos la referencia
+            className="w-full max-w-6xl mx-auto px-4 lg:px-6 pb-12 scroll-mt-20" // scroll-mt da margen al hacer scroll
+          >
             <div className="flex items-center justify-between mb-4">
                  <h3 className="text-lg font-semibold text-gray-200 border-l-4 border-purple-500 pl-3">
                   Search Results
                 </h3>
             </div>
            
-            {/* Scroll Horizontal Container */}
             <div className="relative w-full group/scroll">
                 <div className="flex overflow-x-auto pb-6 gap-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent hover:scrollbar-thumb-purple-600/50 transition-colors">
                    <SearchResults
@@ -275,7 +302,6 @@ function Room() {
                       roomId={roomId}
                     />
                 </div>
-                {/* Fade derecho */}
                 <div className="absolute top-0 right-0 h-full w-16 bg-gradient-to-l from-[#0f0f0f] to-transparent pointer-events-none"></div>
             </div>
           </div>
@@ -288,7 +314,6 @@ function Room() {
             lg:relative lg:translate-x-0 lg:flex lg:flex-col lg:shadow-none
             ${showChatMobile ? 'translate-x-0' : 'translate-x-full'}
           `}>
-            {/* Header Chat */}
             <div className="h-14 flex items-center justify-between px-4 border-b border-white/5 bg-[#1a1a1a]">
               <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
