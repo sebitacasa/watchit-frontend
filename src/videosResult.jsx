@@ -1,35 +1,57 @@
 import { useSelector } from 'react-redux';
 import socket from './socket';
+import { Play } from 'lucide-react'; // Si instalaste los iconos, queda genial
 
 const SearchResults = ({ videoId, setVideoId, roomId }) => {
   const videos = useSelector(state => state.videos);
-  console.log("Videos en SearchResults:", videos);
- 
+
+  // Si no hay videos, no renderizamos nada para no romper el layout
+  if (!videos?.length) return null;
 
   return (
-    <div className="space-y-4">
-      {videos?.map(video => (
-        <div key={video.videoId} className="flex items-start gap-4 bg-neutral-800 p-4 rounded-lg">
-          <img src={video.thumbnail} alt={video.title} className="w-40 rounded-md" />
-          <div>
-            <h3 className="text-lg font-semibold">{video.title}</h3>
-            <p className="text-sm text-neutral-400">{video.channelTitle}</p>
-            {/* Podés agregar botón para reproducir */}
-            <button
-        onClick={() => {
-                setVideoId(video.videoId); // ✅ actualiza el reproductor
-                socket.emit('change-video', { roomId, videoId: video.videoId }); // ✅ usa la room real
-              }}
-            //   onClick={() => socket.emit('change-video', { roomId, videoId: video.videoId })}
-              className="mt-2 px-4 py-1 bg-yellow-500 text-black rounded"
-            >
-              Reproducir
-            </button>
+    <>
+      {videos.map(video => (
+        <div 
+          key={video.videoId} 
+          // Clases clave para el carrusel:
+          // flex-shrink-0: Evita que se aplaste.
+          // w-60: Ancho fijo.
+          // snap-start: Para que el scroll se sienta "magnético".
+          className="group relative flex-shrink-0 w-60 bg-[#1f1f1f] rounded-xl overflow-hidden cursor-pointer hover:scale-105 hover:shadow-xl hover:shadow-purple-900/20 transition-all duration-300 border border-white/5 snap-start"
+          
+          onClick={() => {
+            setVideoId(video.videoId); 
+            socket.emit('change-video', { roomId, videoId: video.videoId });
+          }}
+        >
+          {/* Contenedor de Imagen */}
+          <div className="relative h-32 w-full">
+            <img 
+              src={video.thumbnail} 
+              alt={video.title} 
+              className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" 
+            />
+            {/* Overlay Oscuro + Icono Play al hacer hover */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
+              <div className="bg-purple-600 p-2 rounded-full shadow-lg transform scale-0 group-hover:scale-100 transition-transform duration-300">
+                <Play size={20} fill="white" className="text-white ml-1" />
+              </div>
+            </div>
+          </div>
+
+          {/* Info del Video */}
+          <div className="p-3">
+            <h3 className="text-sm font-semibold text-white line-clamp-2 leading-snug group-hover:text-purple-400 transition-colors">
+              {video.title}
+            </h3>
+            <p className="text-xs text-gray-400 mt-1 truncate">
+              {video.channelTitle}
+            </p>
           </div>
         </div>
       ))}
-    </div>
+    </>
   );
 };
 
-export default SearchResults
+export default SearchResults;

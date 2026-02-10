@@ -4,9 +4,9 @@ import socket from './socket';
 import VideoPlayer from './VideoPlayer';
 import Chat from './Chat';
 import Footer from './Footer';
-import { getVideoByName } from './redux/actions'; // Asumiendo que usas Redux
 import { useDispatch } from "react-redux";
 import SearchResults from './videosResult';
+import { Search, MonitorPlay, MessageSquare, Users, Tv } from 'lucide-react'; // Iconos
 
 function Room() {
   const dispatch = useDispatch();
@@ -15,10 +15,14 @@ function Room() {
   const playerRef = useRef(null);
   const [videoId, setVideoId] = useState('dQw4w9WgXcQ');
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // ESTADO NUEVO: Controla si el usuario ya recibió la hora del servidor
   const [isSynced, setIsSynced] = useState(false);
+  const [showChatMobile, setShowChatMobile] = useState(false); // Para móviles
 
+  // ... (TODA LA LÓGICA DE SOCKETS SE MANTIENE IGUAL - CÓPIALA AQUÍ) ...
+  // He ocultado la lógica repetida para enfocarme en el render, 
+  // pero ASEGÚRATE de mantener tus funciones handleSearch, extractVideoId, 
+  // handleVideoEvent y todos los useEffects tal cual estaban.
+  
   const handleSearch = (e) => {
     e.preventDefault();
     const isYouTubeLink = searchTerm.includes('youtube.com') || searchTerm.includes('youtu.be');
@@ -27,14 +31,11 @@ function Room() {
       const idFromUrl = extractVideoId(searchTerm);
       if (idFromUrl && idFromUrl.length === 11) {
         setVideoId(idFromUrl);
-        // Al cambiar video, asumimos sync porque nosotros lo iniciamos
         setIsSynced(true); 
         socket.emit('change-video', { roomId, videoId: idFromUrl });
-        // dispatch(getVideoByName(idFromUrl)); 
       }
-    } else {
-      // dispatch(getVideoByName(searchTerm));
     }
+    // Aquí iría tu dispatch de búsqueda normal
   };
 
   const extractVideoId = (url) => {
@@ -46,14 +47,9 @@ function Room() {
   const handleVideoEvent = ({ type, currentTime }) => {
     const player = playerRef.current;
     if (!player) return;
-
-    // Si recibo un evento del servidor, significa que ya estoy en el flujo
-    // Aseguramos que isSynced sea true para poder responder en el futuro
     setIsSynced(true);
-
     const current = player.getCurrentTime();
     const diff = Math.abs(current - currentTime);
-
     switch (type) {
       case 'play':
         if (diff > 1) player.seekTo(currentTime, true);
@@ -63,8 +59,7 @@ function Room() {
         if (diff > 1) player.seekTo(currentTime, true);
         player.pauseVideo();
         break;
-      default:
-        break;
+      default: break;
     }
   };
 
@@ -78,7 +73,7 @@ function Room() {
     const handleChangeVideo = ({ videoId }) => {
       if (videoId && videoId !== currentVideoIdRef.current) {
         setVideoId(videoId);
-        setIsSynced(true); // Nuevo video = reset de sync
+        setIsSynced(true); 
       }
     };
 
@@ -91,38 +86,27 @@ function Room() {
       if (storedUser) {
         setUser(storedUser);
         socket.emit('join-room', roomId);
-        
-        // IMPORTANTE: Al unirse, pedimos sincronización
-        // No asumimos nada, preguntamos al server.
         setIsSynced(false);
         socket.emit('ask-sync', roomId);
       }
     };
 
-    // --- LOGICA DE SINCRONIZACIÓN NUEVA ---
-
-    // 1. Alguien nuevo entró y el servidor ME pide la hora (porque soy veterano)
     const handleGetTime = (requesterId) => {
       const player = playerRef.current;
       if (player && typeof player.getCurrentTime === 'function') {
         const time = player.getCurrentTime();
-        const state = player.getPlayerState(); // 1=Playing, 2=Paused
+        const state = player.getPlayerState();
         socket.emit('sync-response', { roomId, requesterId, time, state });
       }
     };
 
-    // 2. Soy nuevo y el servidor ME da la hora
     const handleSetTime = ({ time, state }) => {
       const player = playerRef.current;
       if (player) {
         console.log(`Sincronizando a ${time}s`);
         player.seekTo(time, true);
-        if (state === 1) {
-          player.playVideo();
-        } else {
-          player.pauseVideo();
-        }
-        // ¡AHORA SÍ! Ya tengo la hora correcta, puedo empezar a emitir eventos
+        if (state === 1) player.playVideo();
+        else player.pauseVideo();
         setIsSynced(true);
       }
     };
@@ -130,14 +114,10 @@ function Room() {
     socket.on('change-video', handleChangeVideo);
     socket.on('video-event', handleVideoEvent);
     socket.on('connect', handleInitUser);
-    
-    // Nuevos listeners
     socket.on('get-time', handleGetTime);
     socket.on('set-time', handleSetTime);
 
-    if (socket.connected) {
-      handleInitUser();
-    }
+    if (socket.connected) handleInitUser();
 
     return () => {
       socket.off('change-video', handleChangeVideo);
@@ -148,66 +128,154 @@ function Room() {
     };
   }, [roomId]);
 
+  // --- FIN LÓGICA EXISTENTE ---
+
   return (
-    <div className="flex flex-col min-h-screen bg-neutral-900 text-white pt-safe pb-safe">
-      <div className="flex flex-1 lg:flex-row flex-col">
-        
-        {/* Panel izquierdo */}
-        <div className="flex-1 flex flex-col p-4">
-          
-          <div className="mb-4 flex gap-2">
+    <div className="flex flex-col h-screen bg-[#0f0f0f] text-gray-100 overflow-hidden font-sans selection:bg-purple-500 selection:text-white">
+      
+      {/* 1. Header Moderno */}
+      <header className="h-16 flex items-center justify-between px-6 bg-[#1a1a1a]/80 backdrop-blur-md border-b border-white/5 z-20 shadow-lg">
+        <div className="flex items-center gap-2 text-purple-500">
+          <MonitorPlay size={28} />
+          <h1 className="text-xl font-bold tracking-tight text-white hidden sm:block">WatchIt</h1>
+        </div>
+
+        {/* Barra de Búsqueda Centrada y Estilizada */}
+        <div className="flex-1 max-w-2xl mx-4">
+          <form onSubmit={handleSearch} className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search size={18} className="text-gray-500 group-focus-within:text-purple-400 transition-colors" />
+            </div>
             <input
               type="text"
-              placeholder="Search on YouTube..."
-              className="flex-1 px-3 py-2 rounded bg-neutral-700 text-white placeholder-gray-400 outline-none"
+              placeholder="Pegar link de YouTube o buscar..."
+              className="w-full pl-10 pr-4 py-2 bg-[#2a2a2a] border border-transparent focus:border-purple-500/50 rounded-full text-sm text-white placeholder-gray-500 outline-none transition-all shadow-inner focus:bg-[#1f1f1f]"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <button
-              onClick={handleSearch}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition"
-            >
-              Buscar
-            </button>
+          </form>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/5">
+            <Users size={16} className="text-green-400" />
+            <span className="text-xs font-medium text-gray-300">Room: {roomId}</span>
+          </div>
+          {/* Botón Chat Móvil */}
+          <button 
+            className="lg:hidden p-2 hover:bg-white/10 rounded-full transition"
+            onClick={() => setShowChatMobile(!showChatMobile)}
+          >
+            <MessageSquare size={20} />
+          </button>
+        </div>
+      </header>
+
+      {/* 2. Layout Principal */}
+      <main className="flex-1 flex overflow-hidden relative">
+        
+        {/* Columna Izquierda: Video + Carrusel */}
+        <div className="flex-1 flex flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+          
+          {/* Contenedor del Video con Efecto Glow */}
+          <div className="w-full max-w-6xl mx-auto p-4 lg:p-6 pb-0">
+            <div className="relative group w-full aspect-video rounded-xl shadow-2xl bg-black overflow-hidden border border-white/10">
+              {/* Glow Effect detrás del video */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl blur-2xl opacity-20 group-hover:opacity-30 transition duration-1000"></div>
+              
+              <div className="relative w-full h-full z-10">
+                <VideoPlayer
+                  videoId={videoId}
+                  playerRef={playerRef}
+                  isSynced={isSynced}
+                  onEvent={(type, currentTime) => {
+                    if (isSynced) socket.emit('video-event', { roomId, type, currentTime });
+                  }}
+                  onReady={() => {
+                    if (!isSynced) socket.emit('ask-sync', roomId);
+                  }}
+                />
+              </div>
+            </div>
+            
+            {/* Info del Video */}
+            <div className="mt-4 mb-6">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Tv size={20} className="text-purple-400" />
+                    Reproduciendo ahora
+                </h2>
+                <p className="text-sm text-gray-400 mt-1">Sincronizado con la sala</p>
+            </div>
           </div>
 
-          <h2 className="text-2xl font-semibold mb-4">Room: {roomId}</h2>
-
-          <div className="flex-grow flex items-center justify-center min-h-[300px]">
-            <VideoPlayer
-              videoId={videoId}
-              playerRef={playerRef}
-              isSynced={isSynced} // Pasamos la prop para bloquear eventos
-              onEvent={(type, currentTime) => {
-                // Doble chequeo de seguridad
-                if (isSynced) {
-                  socket.emit('video-event', { roomId, type, currentTime });
-                }
-              }}
-              onReady={() => {
-                // Cuando el player carga, si no estamos sync, pedimos sync de nuevo por seguridad
-                if (!isSynced) socket.emit('ask-sync', roomId);
-              }}
-            />
-          </div>
-
-          <div className="mt-4 max-h-[300px] overflow-y-auto text-white">
-            <SearchResults
-              videoId={videoId}
-              setVideoId={setVideoId}
-              roomId={roomId}
-            />
+          {/* 3. Carrusel de Resultados / Recomendaciones */}
+          <div className="w-full max-w-6xl mx-auto px-4 lg:px-6 pb-8">
+            <h3 className="text-lg font-semibold mb-3 text-gray-200 border-l-4 border-purple-500 pl-3">
+              Resultados de búsqueda
+            </h3>
+            
+            {/* Contenedor del Carrusel Horizontal */}
+            <div className="relative w-full">
+               <div className="flex overflow-x-auto pb-4 gap-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-purple-900/50 scrollbar-track-transparent">
+                  {/* Pasamos estilos personalizados al componente hijo si es posible, 
+                      o asumimos que SearchResults mapea items. 
+                      Aquí lo envolvemos para forzar el layout horizontal. */}
+                  <div className="flex flex-row gap-4 min-w-full">
+                    <SearchResults
+                      videoId={videoId}
+                      setVideoId={setVideoId}
+                      roomId={roomId}
+                      // IMPORTANTE: Tu componente SearchResults debe poder renderizar 
+                      // tarjetas con un ancho fijo (ej: w-64) para que el carrusel funcione bien.
+                      // Si SearchResults devuelve un <ul> vertical, necesitarás modificar SearchResults.js
+                      // para que use clases flex/grid o acepte className.
+                    />
+                  </div>
+               </div>
+               {/* Sombras laterales para indicar scroll */}
+               <div className="absolute top-0 right-0 h-full w-12 bg-gradient-to-l from-[#0f0f0f] to-transparent pointer-events-none"></div>
+            </div>
           </div>
         </div>
 
-        {/* Panel derecho (Chat) */}
+        {/* Columna Derecha: Chat */}
         {user && (
-          <div className="lg:w-[350px] w-full bg-neutral-800 p-4 border-l border-white/10 shadow-inner flex flex-col">
-            <Chat roomId={roomId} user={user} />
+          <div className={`
+            fixed inset-y-0 right-0 w-80 bg-[#151515] border-l border-white/10 transform transition-transform duration-300 z-30
+            lg:relative lg:translate-x-0 lg:flex lg:flex-col
+            ${showChatMobile ? 'translate-x-0 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]' : 'translate-x-full'}
+          `}>
+            {/* Cabecera del Chat */}
+            <div className="h-14 flex items-center justify-between px-4 border-b border-white/5 bg-[#1a1a1a]">
+              <span className="font-semibold text-gray-200">Chat de Sala</span>
+              <button 
+                onClick={() => setShowChatMobile(false)}
+                className="lg:hidden text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Componente Chat */}
+            <div className="flex-1 overflow-hidden relative bg-gradient-to-b from-[#151515] to-[#0a0a0a]">
+               <Chat roomId={roomId} user={user} />
+            </div>
           </div>
         )}
+      </main>
+
+      {/* Overlay para cerrar chat en móvil */}
+      {showChatMobile && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-20 lg:hidden"
+          onClick={() => setShowChatMobile(false)}
+        ></div>
+      )}
+
+      {/* Footer Minimalista */}
+      <div className="hidden lg:block border-t border-white/5 bg-[#0f0f0f]">
+        <Footer />
       </div>
-      <Footer />
     </div>
   );
 }
