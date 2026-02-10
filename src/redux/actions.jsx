@@ -1,38 +1,46 @@
-export const SEARCHVIDEOS = "SEARCHVIDEOS"
-import axios from "axios"
+export const SEARCHVIDEOS = "SEARCHVIDEOS";
+import axios from "axios";
 
-import axios from 'axios';
-
-// Tu API KEY de Google Console (Habilita YouTube Data API v3)
-const API_KEY = 'TU_API_KEY_AQUI'; 
-
-export function getVideoByName(name) {
-  return async function (dispatch) {
+export function getVideoByName(searchQuery) {
+  return async (dispatch) => {
     try {
-      const response = await axios.get(`https://www.googleapis.com/youtube/v3/search`, {
-        params: {
-          part: 'snippet',
-          q: name,
-          type: 'video',
-          key: API_KEY,
-          maxResults: 10
-        }
+      // 1. Llamada al Backend
+      // NOTA: Asegúrate de que tu backend espere 'searchQuery'. 
+      // Si tu backend usa 'q', cambia abajo a: params: { q: searchQuery }
+      const res = await axios.get('https://watchit-backend-2hhk.onrender.com/youtube-search', {
+        params: { searchQuery } 
       });
 
-      // Mapeamos solo lo que nos interesa para limpiar la data
-      const videos = response.data.items.map(item => ({
-        videoId: item.id.videoId,
-        title: item.snippet.title,
-        thumbnail: item.snippet.thumbnails.medium.url,
-        channelTitle: item.snippet.channelTitle
-      }));
+      console.log("Respuesta cruda del Backend:", res.data);
 
+      // 2. DETECTAR Y FORMATEAR DATOS
+      // Si el backend te devuelve la respuesta directa de YouTube (con "items"),
+      // necesitamos limpiarla aquí para que el componente SearchResults no se rompa.
+      let videosFormatted = [];
+
+      if (res.data.items) {
+        // Caso A: El backend devuelve la respuesta cruda de YouTube
+        videosFormatted = res.data.items.map(item => ({
+          videoId: item.id.videoId,
+          title: item.snippet.title,
+          thumbnail: item.snippet.thumbnails.medium.url,
+          channelTitle: item.snippet.channelTitle
+        }));
+      } else if (Array.isArray(res.data)) {
+        // Caso B: El backend ya devolvió el array limpio
+        videosFormatted = res.data;
+      } else {
+         console.warn("Formato de respuesta desconocido", res.data);
+      }
+
+      // 3. Despachar al Reducer la lista limpia
       return dispatch({
-        type: "GET_VIDEO_BY_NAME",
-        payload: videos,
+        type: SEARCHVIDEOS,
+        payload: videosFormatted
       });
+
     } catch (error) {
-      console.error("Error buscando videos:", error);
+      console.error("Error en la action getVideoByName:", error);
     }
   };
 }
