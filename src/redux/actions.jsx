@@ -1,21 +1,38 @@
 export const SEARCHVIDEOS = "SEARCHVIDEOS"
 import axios from "axios"
 
-export function getVideoByName(searchQuery){
-    return async (dispatch) => {
-        
-          const res = await axios.get('https://watchit-backend-2hhk.onrender.com/youtube-search', {
-        params: { searchQuery }
+import axios from 'axios';
+
+// Tu API KEY de Google Console (Habilita YouTube Data API v3)
+const API_KEY = 'TU_API_KEY_AQUI'; 
+
+export function getVideoByName(name) {
+  return async function (dispatch) {
+    try {
+      const response = await axios.get(`https://www.googleapis.com/youtube/v3/search`, {
+        params: {
+          part: 'snippet',
+          q: name,
+          type: 'video',
+          key: API_KEY,
+          maxResults: 10
+        }
       });
 
-       console.log("Resultado de búsqueda:", res.data); // 👈 Acá va el log
+      // Mapeamos solo lo que nos interesa para limpiar la data
+      const videos = response.data.items.map(item => ({
+        videoId: item.id.videoId,
+        title: item.snippet.title,
+        thumbnail: item.snippet.thumbnails.medium.url,
+        channelTitle: item.snippet.channelTitle
+      }));
 
-
-        return dispatch({
-            type: SEARCHVIDEOS,
-            payload: res.data
-            
-        }
-    )
+      return dispatch({
+        type: "GET_VIDEO_BY_NAME",
+        payload: videos,
+      });
+    } catch (error) {
+      console.error("Error buscando videos:", error);
     }
+  };
 }

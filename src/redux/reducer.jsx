@@ -1,18 +1,18 @@
-import * as Action from "./actions"; // importa el type correcto
-
 const initialState = {
-  videos: []
+  videos: [], // Aquí se guardarán los resultados
+  // ...otros estados
 };
 
-export default function rootReducer(state = initialState, action) {
-
+function rootReducer(state = initialState, action) {
   switch (action.type) {
-    case Action.SEARCHVIDEOS:
+    case "GET_VIDEO_BY_NAME":
       return {
         ...state,
-        videos: action.payload
+        videos: action.payload, // Actualizamos la lista
       };
     default:
       return state;
   }
 }
+
+export default rootReducer;
