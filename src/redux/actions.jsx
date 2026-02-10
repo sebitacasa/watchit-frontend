@@ -4,22 +4,18 @@ import axios from "axios";
 export function getVideoByName(searchQuery) {
   return async (dispatch) => {
     try {
-      // 1. Llamada al Backend
-      // NOTA: Asegúrate de que tu backend espere 'searchQuery'. 
-      // Si tu backend usa 'q', cambia abajo a: params: { q: searchQuery }
-        const res = await axios.get('https://watchit-backend-2hhk.onrender.com/youtube-search', {
-        params: { q: searchQuery }
+      console.log("🚀 Enviando petición al backend:", searchQuery);
+
+      // CORRECCIÓN: Usamos 'searchQuery' si así lo espera tu backend
+      const res = await axios.get('https://watchit-backend-2hhk.onrender.com/youtube-search', {
+        params: { searchQuery: searchQuery } 
       });
 
-      console.log("Respuesta cruda del Backend:", res.data);
+      console.log("✅ Respuesta del Backend:", res.data);
 
-      // 2. DETECTAR Y FORMATEAR DATOS
-      // Si el backend te devuelve la respuesta directa de YouTube (con "items"),
-      // necesitamos limpiarla aquí para que el componente SearchResults no se rompa.
+      // Lógica de limpieza (Mantener esto es importante)
       let videosFormatted = [];
-
       if (res.data.items) {
-        // Caso A: El backend devuelve la respuesta cruda de YouTube
         videosFormatted = res.data.items.map(item => ({
           videoId: item.id.videoId,
           title: item.snippet.title,
@@ -27,20 +23,18 @@ export function getVideoByName(searchQuery) {
           channelTitle: item.snippet.channelTitle
         }));
       } else if (Array.isArray(res.data)) {
-        // Caso B: El backend ya devolvió el array limpio
         videosFormatted = res.data;
-      } else {
-         console.warn("Formato de respuesta desconocido", res.data);
       }
 
-      // 3. Despachar al Reducer la lista limpia
+      console.log("📦 Despachando al Redux:", videosFormatted);
+
       return dispatch({
         type: SEARCHVIDEOS,
         payload: videosFormatted
       });
 
     } catch (error) {
-      console.error("Error en la action getVideoByName:", error);
+      console.error("❌ Error FATAL en la acción:", error);
     }
   };
 }
