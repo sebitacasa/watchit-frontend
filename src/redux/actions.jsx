@@ -1,40 +1,33 @@
-export const SEARCHVIDEOS = "SEARCHVIDEOS";
 import axios from "axios";
+export const SEARCHVIDEOS = "SEARCHVIDEOS";
 
-export function getVideoByName(searchQuery) {
-  return async (dispatch) => {
-    try {
-      console.log("🚀 Enviando petición al backend:", searchQuery);
+export function getVideoByName(name) {
+    return async (dispatch) => {
+        try {
+            console.log("📡 Enviando búsqueda:", name);
 
-      // CORRECCIÓN: Usamos 'searchQuery' si así lo espera tu backend
-      const res = await axios.get('https://watchit-backend-2hhk.onrender.com/youtube-search', {
-        params: { searchQuery: searchQuery } 
-      });
+            // 1. LLAMADA AL BACKEND
+            // Usamos la key 'searchQuery' porque tu backend hace: const { searchQuery } = req.query;
+            const res = await axios.get('https://watchit-backend-2hhk.onrender.com/youtube-search', {
+                params: {
+                    searchQuery: name 
+                }
+            });
 
-      console.log("✅ Respuesta del Backend:", res.data);
+            console.log("✅ Datos recibidos del Backend:", res.data);
 
-      // Lógica de limpieza (Mantener esto es importante)
-      let videosFormatted = [];
-      if (res.data.items) {
-        videosFormatted = res.data.items.map(item => ({
-          videoId: item.id.videoId,
-          title: item.snippet.title,
-          thumbnail: item.snippet.thumbnails.medium.url,
-          channelTitle: item.snippet.channelTitle
-        }));
-      } else if (Array.isArray(res.data)) {
-        videosFormatted = res.data;
-      }
+            // 2. NO HACE FALTA MAPEAR NADA
+            // Tu backend ya hizo el trabajo sucio y devuelve: [{ videoId, title, thumbnail }, ...]
+            // Así que pasamos res.data directo.
 
-      console.log("📦 Despachando al Redux:", videosFormatted);
+            return dispatch({
+                type: SEARCHVIDEOS,
+                payload: res.data 
+            });
 
-      return dispatch({
-        type: SEARCHVIDEOS,
-        payload: videosFormatted
-      });
-
-    } catch (error) {
-      console.error("❌ Error FATAL en la acción:", error);
+        } catch (error) {
+            console.error("❌ Error buscando videos:", error);
+            // Opcional: Podrías despachar una acción de error si quisieras mostrar un mensaje al usuario
+        }
     }
-  };
 }
