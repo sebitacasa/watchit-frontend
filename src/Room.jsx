@@ -7,7 +7,7 @@ import Footer from './Footer';
 import { useDispatch, useSelector } from "react-redux";
 import { getVideoByName } from './redux/actions'; 
 import SearchResults from './videosResult';
-import { Search, MonitorPlay, MessageSquare, Users, Tv, Play } from 'lucide-react';
+import { Search, MonitorPlay, MessageSquare, Users, Tv, Play, Smartphone } from 'lucide-react';
 
 function Room() {
   const dispatch = useDispatch();
@@ -26,16 +26,17 @@ function Room() {
   const [showChatMobile, setShowChatMobile] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
   
+  // Mobile Interaction State (Nuevo: Para saber si el usuario ya tocó la pantalla)
+  const [hasInteracted, setHasInteracted] = useState(false);
+
   const playerRef = useRef(null);
   const currentVideoIdRef = useRef(videoId);
   const resultsRef = useRef(null); 
 
-  // --- 🔒 CANDADO MAESTRO (CRÍTICO) ---
-  // Si esto es TRUE, ignoramos cualquier evento que venga del reproductor.
-  // Evita que el buffering o la carga inicial pausen a los demás.
-  const blockEventsRef = useRef(false);
+  // --- 🔒 SISTEMA ANTI-BUCLES ---
+  const blockEventsRef = useRef(false);   // Bloquea eventos temporales (seek, carga)
+  const isPlayingRef = useRef(false);     // Rastrea si REALMENTE se estaba reproduciendo
 
-  // Función auxiliar para bloquear emisiones temporalmente
   const blockEmissions = (duration = 2000) => {
     blockEventsRef.current = true;
     setTimeout(() => {
@@ -85,33 +86,46 @@ function Room() {
     return match ? match[1] : null;
   };
 
-  // --- SOCKETS AND VIDEO LOGIC ---
-  
-  // Este evento se dispara cuando el usuario (O EL SOCKET) toca play/pause
+  // --- LÓGICA DE EVENTOS DEL VIDEO (CORREGIDA PARA MÓVIL) ---
   const handleVideoEvent = ({ type, currentTime }) => {
     const player = playerRef.current;
     if (!player) return;
 
-    // 🔒 ACTIVAMOS EL CANDADO: 
-    // Como acabo de recibir una orden externa, bloqueo mis propias emisiones
-    // para no rebotar la señal al servidor.
-    blockEmissions(1500);
+    // Si no ha interactuado, marcamos que ya lo hizo al tocar controles
+    if (!hasInteracted) setHasInteracted(true);
 
     setIsSynced(true);
     const current = player.getCurrentTime();
     const diff = Math.abs(current - currentTime);
 
-    switch (type) {
-      case 'play':
-        // Solo buscamos si la diferencia es grande (evita saltos pequeños)
+    // 🛡️ LÓGICA ANTI-ECO MÓVIL
+    if (blockEventsRef.current) {
+        console.log(`🛡️ Blocked ${type} (System Update)`);
+        
+        // Si el sistema fuerza Play, actualizamos nuestro ref interno
+        if (type === 'play') isPlayingRef.current = true;
+        return; 
+    }
+
+    if (type === 'play') {
+        // Marcamos que estamos reproduciendo legítimamente
+        isPlayingRef.current = true; 
         if (diff > 1) player.seekTo(currentTime, true);
         player.playVideo();
-        break;
-      case 'pause':
+    
+    } else if (type === 'pause') {
+        // 🚨 AQUÍ ESTÁ EL TRUCO:
+        // Si recibimos "PAUSE" pero isPlayingRef era false, significa que
+        // el video nunca arrancó de verdad (bloqueo de móvil o buffering).
+        // EN ESE CASO, IGNORAMOS EL PAUSE.
+        if (isPlayingRef.current === false) {
+            console.log("🚫 Ignorando Pause Falso (Bloqueo de Autoplay o Buffering)");
+            return; 
+        }
+
+        isPlayingRef.current = false; // Ahora sí marcamos pausado
         if (diff > 1) player.seekTo(currentTime, true);
         player.pauseVideo();
-        break;
-      default: break;
     }
   };
 
@@ -122,12 +136,15 @@ function Room() {
       setVideoTitle(data.title);
       setChannelTitle(data.author);
     }
-    // Al cargar, pedimos sync y bloqueamos emisiones por si acaso el autoplay falla
     blockEmissions(2000);
     if (!isSynced) socket.emit('ask-sync', roomId);
   };
 
   const handleStateChange = (event) => {
+    // Detectamos si el usuario toca el video para habilitar audio/sync
+    if (event.data === 1 || event.data === 3) { // 1=Playing, 3=Buffering
+        setHasInteracted(true);
+    }
     const player = event.target;
     if (player.getVideoData) {
         const data = player.getVideoData();
@@ -140,12 +157,12 @@ function Room() {
     currentVideoIdRef.current = videoId;
   }, [videoId]);
 
-  // --- MAIN EFFECT (SOCKETS) ---
+  // --- SOCKETS MAIN EFFECT ---
   useEffect(() => {
     const handleChangeVideo = ({ videoId }) => {
       if (videoId && videoId !== currentVideoIdRef.current) {
-        // Bloqueamos al cambiar video porque el player nuevo disparará eventos de carga
-        blockEmissions(2000);
+        blockEmissions(2500); // Bloqueo largo al cambiar video
+        isPlayingRef.current = false; // Reseteamos estado
         setVideoId(videoId);
         setIsSynced(true); 
       }
@@ -165,7 +182,6 @@ function Room() {
       }
     };
 
-    // --- HANDSHAKE LOGIC ---
     const handleGetTime = (requesterId) => {
       const player = playerRef.current;
       if (player && typeof player.getCurrentTime === 'function' && currentVideoIdRef.current) {
@@ -187,22 +203,25 @@ function Room() {
     const handleSetTime = ({ time, state, videoId: incomingVideoId }) => {
       console.log(`📥 Received sync`);
       
-      // 🔒 CRÍTICO: El nuevo usuario recibe datos. 
-      // Bloqueamos sus emisiones inmediatamente para que su "carga" no pause a los demás.
-      blockEmissions(2500); 
+      // Bloqueamos emisiones para evitar que mi player le conteste al servidor
+      blockEmissions(3000); // 3 segundos para dar tiempo al móvil
 
       if (incomingVideoId && incomingVideoId !== currentVideoIdRef.current) {
          setVideoId(incomingVideoId);
+         isPlayingRef.current = false;
       }
 
       const player = playerRef.current;
       if (player) {
-        // Intentamos sincronizar
         player.seekTo(time, true);
+        
         if (state === 1) {
+            // Intentamos reproducir
             player.playVideo();
+            isPlayingRef.current = true;
         } else {
             player.pauseVideo();
+            isPlayingRef.current = false;
         }
         setIsSynced(true);
       }
@@ -225,6 +244,16 @@ function Room() {
     };
   }, [roomId]);
 
+  // Función para forzar la interacción en móvil
+  const handleMobileUnlock = () => {
+     setHasInteracted(true);
+     const player = playerRef.current;
+     if(player) {
+         player.playVideo();
+         // Enviamos play para forzar sync
+         socket.emit('video-event', { roomId, type: 'play', currentTime: player.getCurrentTime() });
+     }
+  };
 
   return (
     <div className="flex flex-col h-screen bg-[#0f0f0f] text-gray-100 overflow-hidden font-sans selection:bg-purple-500 selection:text-white">
@@ -236,7 +265,6 @@ function Room() {
           <h1 className="text-xl font-bold tracking-tight text-white hidden sm:block">WatchIt</h1>
         </div>
 
-        {/* Search Bar */}
         <div className="flex-1 max-w-xl mx-4">
           <form onSubmit={handleSearch} className="relative group">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -269,7 +297,7 @@ function Room() {
       {/* --- MAIN LAYOUT --- */}
       <main className="flex-1 flex overflow-hidden relative">
         
-        {/* LEFT COLUMN (Video + Results) */}
+        {/* LEFT COLUMN */}
         <div className="flex-1 flex flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
           
           {/* Video Container */}
@@ -285,18 +313,42 @@ function Room() {
                             playerRef={playerRef}
                             isSynced={isSynced}
                             onEvent={(type, currentTime) => {
-                                // 🔒 LÓGICA DE ENVÍO CORREGIDA
-                                // Si estamos "Synced" Y NO tenemos el candado activado, enviamos.
-                                if (isSynced && !blockEventsRef.current) {
-                                    console.log(`📡 Emitting event: ${type}`);
+                                // 🔒 LÓGICA DE ENVÍO FINAL
+                                // 1. Si está bloqueado por sistema, NO enviar.
+                                if (blockEventsRef.current) return;
+
+                                // 2. Si es PAUSE, verificar si realmente estábamos reproduciendo antes.
+                                // Esto evita que el bloqueo de móvil dispare un pause.
+                                if (type === 'pause' && !isPlayingRef.current) {
+                                    console.log("🚫 Prevented false pause emission");
+                                    return;
+                                }
+
+                                // 3. Actualizar estado local y enviar
+                                if (type === 'play') isPlayingRef.current = true;
+                                if (type === 'pause') isPlayingRef.current = false;
+
+                                if (isSynced) {
                                     socket.emit('video-event', { roomId, type, currentTime });
-                                } else {
-                                    console.log(`🛡️ Blocked emission: ${type} (Auto-syncing)`);
                                 }
                             }}
                             onReady={handlePlayerReady}
                             onStateChange={handleStateChange} 
                         />
+                        
+                        {/* Overlay para Móviles (Solo aparece si hay video y no han interactuado) */}
+                        {!hasInteracted && (
+                             <div 
+                                onClick={handleMobileUnlock}
+                                className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 cursor-pointer backdrop-blur-sm transition-opacity hover:bg-black/70"
+                             >
+                                <div className="p-4 bg-purple-600 rounded-full animate-pulse shadow-lg shadow-purple-500/50">
+                                    <Smartphone size={32} className="text-white" />
+                                </div>
+                                <h3 className="mt-4 text-white font-bold text-lg">Tap to Sync</h3>
+                                <p className="text-gray-300 text-sm">Click to enable sound & video</p>
+                             </div>
+                        )}
                     </>
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full w-full text-gray-500 bg-[#0a0a0a]">
@@ -312,6 +364,7 @@ function Room() {
               </div>
             </div>
             
+            {/* Info Video */}
             <div className="mt-5 mb-8 px-1">
                 <h2 className="text-xl md:text-2xl font-bold text-white flex items-start gap-3 leading-tight">
                     <Tv size={24} className={`mt-1 flex-shrink-0 ${videoId ? 'text-purple-500' : 'text-gray-600'}`} />
