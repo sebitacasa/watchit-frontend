@@ -40,7 +40,7 @@ function Chat({ roomId, user }) {
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-600 opacity-50">
             <MessageSquare size={48} className="mb-2" />
-            <p className="text-sm">Sé el primero en hablar</p>
+            <p className="text-sm">Start the chat...</p>
           </div>
         )}
 
@@ -82,7 +82,7 @@ function Chat({ roomId, user }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Escribe un mensaje..."
+            placeholder="Write a message..."
             className="w-full pl-4 pr-12 py-3 bg-[#0f0f0f] text-gray-200 placeholder-gray-500 text-sm rounded-full border border-white/5 focus:border-purple-500/50 outline-none transition-all"
           />
           <button
