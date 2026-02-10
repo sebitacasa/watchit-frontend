@@ -18,9 +18,9 @@ function Room() {
 
   // User and Room States
   const [user, setUser] = useState('');
-  const [videoId, setVideoId] = useState(''); // Initial state EMPTY
-  const [videoTitle, setVideoTitle] = useState('Room Ready'); // English
-  const [channelTitle, setChannelTitle] = useState('Waiting for video...'); // English
+  const [videoId, setVideoId] = useState(''); 
+  const [videoTitle, setVideoTitle] = useState('Room Ready'); 
+  const [channelTitle, setChannelTitle] = useState('Waiting for video...'); 
   
   // Interface States
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,7 +29,11 @@ function Room() {
   
   const playerRef = useRef(null);
   const currentVideoIdRef = useRef(videoId);
-  const resultsRef = useRef(null); // Ref for scroll
+  const resultsRef = useRef(null); 
+
+  // --- 🔒 CRITICAL FIX: Remote Update Flag ---
+  // This prevents the "Echo Loop" (Server -> Player -> Server -> Player)
+  const isRemoteUpdate = useRef(false);
 
   // --- SEARCH LOGIC ---
   const handleSearch = (e) => {
@@ -63,7 +67,7 @@ function Room() {
     return () => clearTimeout(delaySearch);
   }, [searchTerm, dispatch]);
 
-  // AUTO-SCROLL EFFECT: Scroll to results when they arrive
+  // AUTO-SCROLL EFFECT
   useEffect(() => {
     if (videos && videos.length > 0 && searchTerm.trim() !== '') {
         setTimeout(() => {
@@ -86,6 +90,9 @@ function Room() {
     const player = playerRef.current;
     if (!player) return;
 
+    // 🔒 1. Raise the flag: "This is a computer update, ignore emissions"
+    isRemoteUpdate.current = true;
+
     setIsSynced(true);
     const current = player.getCurrentTime();
     const diff = Math.abs(current - currentTime);
@@ -101,6 +108,11 @@ function Room() {
         break;
       default: break;
     }
+
+    // 🔒 2. Lower the flag after a short delay (enough for the player to react)
+    setTimeout(() => {
+        isRemoteUpdate.current = false;
+    }, 500); 
   };
 
   const handlePlayerReady = (event) => {
@@ -153,14 +165,12 @@ function Room() {
     // --- HANDSHAKE LOGIC ---
     const handleGetTime = (requesterId) => {
       const player = playerRef.current;
-      // Only respond if a video is actually loaded
       if (player && typeof player.getCurrentTime === 'function' && currentVideoIdRef.current) {
         const time = player.getCurrentTime();
         const state = player.getPlayerState(); 
         const currentVideo = currentVideoIdRef.current;
 
-        console.log(`📤 Sending sync to ${requesterId}: Video ${currentVideo}`);
-        
+        console.log(`📤 Sending sync to ${requesterId}`);
         socket.emit('sync-response', { 
           roomId, 
           requesterId, 
@@ -172,14 +182,15 @@ function Room() {
     };
 
     const handleSetTime = ({ time, state, videoId: incomingVideoId }) => {
-      console.log(`📥 Received sync video: ${incomingVideoId}`);
+      console.log(`📥 Received sync`);
       
-      // 1. If video is different, change it
+      // 🔒 Raise flag for initial sync too
+      isRemoteUpdate.current = true;
+
       if (incomingVideoId && incomingVideoId !== currentVideoIdRef.current) {
          setVideoId(incomingVideoId);
       }
 
-      // 2. Adjust time
       const player = playerRef.current;
       if (player) {
         player.seekTo(time, true);
@@ -187,6 +198,11 @@ function Room() {
         else player.pauseVideo();
         setIsSynced(true);
       }
+
+      // 🔒 Lower flag
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 1000); // Longer timeout for initial sync/seek
     };
 
     socket.on('change-video', handleChangeVideo);
@@ -257,13 +273,13 @@ function Room() {
           <div className="w-full max-w-6xl mx-auto p-4 lg:p-6 pb-0">
             <div className="relative group w-full aspect-video rounded-xl shadow-2xl bg-black overflow-hidden border border-white/10">
               
-              {/* Video Background (Always visible) */}
+              {/* Video Background */}
               <div className="absolute inset-0 bg-[#0a0a0a] z-0"></div>
 
-              {/* Conditional Content: Video Player vs Placeholder */}
+              {/* Conditional Content */}
               <div className="relative w-full h-full z-10">
                 {videoId ? (
-                    /* IF VIDEO EXISTS: Render Player */
+                    /* IF VIDEO EXISTS */
                     <>
                         <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl blur-2xl opacity-20 group-hover:opacity-30 transition duration-1000 pointer-events-none"></div>
                         <VideoPlayer
@@ -271,14 +287,17 @@ function Room() {
                             playerRef={playerRef}
                             isSynced={isSynced}
                             onEvent={(type, currentTime) => {
-                                if (isSynced) socket.emit('video-event', { roomId, type, currentTime });
+                                // 🔒 CRITICAL: Only emit if it's NOT a remote update
+                                if (isSynced && !isRemoteUpdate.current) {
+                                    socket.emit('video-event', { roomId, type, currentTime });
+                                }
                             }}
                             onReady={handlePlayerReady}
                             onStateChange={handleStateChange} 
                         />
                     </>
                 ) : (
-                    /* NO VIDEO: Render Placeholder */
+                    /* NO VIDEO */
                     <div className="flex flex-col items-center justify-center h-full w-full text-gray-500 bg-[#0a0a0a]">
                         <div className="p-6 bg-white/5 rounded-full mb-6 animate-pulse ring-1 ring-white/10">
                              <Play size={48} className="text-purple-500 ml-1" fill="currentColor" />
@@ -292,7 +311,7 @@ function Room() {
               </div>
             </div>
             
-            {/* Video Info (Title and Status) */}
+            {/* Video Info */}
             <div className="mt-5 mb-8 px-1">
                 <h2 className="text-xl md:text-2xl font-bold text-white flex items-start gap-3 leading-tight">
                     <Tv size={24} className={`mt-1 flex-shrink-0 ${videoId ? 'text-purple-500' : 'text-gray-600'}`} />
@@ -309,12 +328,11 @@ function Room() {
             </div>
           </div>
 
-          {/* Results Carousel (WITH REF FOR SCROLL) */}
+          {/* Results Carousel */}
           <div 
             ref={resultsRef} 
             className="w-full max-w-6xl mx-auto px-4 lg:px-6 pb-12 scroll-mt-24" 
           >
-            {/* Only show title if there are results */}
             {videos && videos.length > 0 && (
                 <div className="flex items-center justify-between mb-4 animate-fade-in">
                     <h3 className="text-lg font-semibold text-gray-200 border-l-4 border-purple-500 pl-3">
@@ -331,7 +349,6 @@ function Room() {
                       roomId={roomId}
                     />
                 </div>
-                {/* Fade only if there is overflowing content (visual) */}
                 <div className="absolute top-0 right-0 h-full w-16 bg-gradient-to-l from-[#0f0f0f] to-transparent pointer-events-none"></div>
             </div>
           </div>
