@@ -13,7 +13,6 @@ function Room() {
   const dispatch = useDispatch();
   const { roomId } = useParams();
   
-  // Get videos from global state for auto-scroll
   const videos = useSelector(state => state.videos);
 
   // User and Room States
@@ -31,9 +30,18 @@ function Room() {
   const currentVideoIdRef = useRef(videoId);
   const resultsRef = useRef(null); 
 
-  // --- 🔒 CRITICAL FIX: Remote Update Flag ---
-  // This prevents the "Echo Loop" (Server -> Player -> Server -> Player)
-  const isRemoteUpdate = useRef(false);
+  // --- 🔒 CANDADO MAESTRO (CRÍTICO) ---
+  // Si esto es TRUE, ignoramos cualquier evento que venga del reproductor.
+  // Evita que el buffering o la carga inicial pausen a los demás.
+  const blockEventsRef = useRef(false);
+
+  // Función auxiliar para bloquear emisiones temporalmente
+  const blockEmissions = (duration = 2000) => {
+    blockEventsRef.current = true;
+    setTimeout(() => {
+      blockEventsRef.current = false;
+    }, duration);
+  };
 
   // --- SEARCH LOGIC ---
   const handleSearch = (e) => {
@@ -55,26 +63,18 @@ function Room() {
     }
   };
 
-  // DEBOUNCE EFFECT: Real-time search
   useEffect(() => {
     if (!searchTerm.trim() || searchTerm.includes('youtube.com')) return;
-
     const delaySearch = setTimeout(() => {
-      console.log("🔍 Auto-searching:", searchTerm);
       dispatch(getVideoByName(searchTerm));
     }, 600);
-
     return () => clearTimeout(delaySearch);
   }, [searchTerm, dispatch]);
 
-  // AUTO-SCROLL EFFECT
   useEffect(() => {
     if (videos && videos.length > 0 && searchTerm.trim() !== '') {
         setTimeout(() => {
-            resultsRef.current?.scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'center' 
-            });
+            resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
     }
   }, [videos]);
@@ -86,12 +86,16 @@ function Room() {
   };
 
   // --- SOCKETS AND VIDEO LOGIC ---
+  
+  // Este evento se dispara cuando el usuario (O EL SOCKET) toca play/pause
   const handleVideoEvent = ({ type, currentTime }) => {
     const player = playerRef.current;
     if (!player) return;
 
-    // 🔒 1. Raise the flag: "This is a computer update, ignore emissions"
-    isRemoteUpdate.current = true;
+    // 🔒 ACTIVAMOS EL CANDADO: 
+    // Como acabo de recibir una orden externa, bloqueo mis propias emisiones
+    // para no rebotar la señal al servidor.
+    blockEmissions(1500);
 
     setIsSynced(true);
     const current = player.getCurrentTime();
@@ -99,6 +103,7 @@ function Room() {
 
     switch (type) {
       case 'play':
+        // Solo buscamos si la diferencia es grande (evita saltos pequeños)
         if (diff > 1) player.seekTo(currentTime, true);
         player.playVideo();
         break;
@@ -108,11 +113,6 @@ function Room() {
         break;
       default: break;
     }
-
-    // 🔒 2. Lower the flag after a short delay (enough for the player to react)
-    setTimeout(() => {
-        isRemoteUpdate.current = false;
-    }, 500); 
   };
 
   const handlePlayerReady = (event) => {
@@ -122,7 +122,8 @@ function Room() {
       setVideoTitle(data.title);
       setChannelTitle(data.author);
     }
-    // If I'm new, ask for sync
+    // Al cargar, pedimos sync y bloqueamos emisiones por si acaso el autoplay falla
+    blockEmissions(2000);
     if (!isSynced) socket.emit('ask-sync', roomId);
   };
 
@@ -143,6 +144,8 @@ function Room() {
   useEffect(() => {
     const handleChangeVideo = ({ videoId }) => {
       if (videoId && videoId !== currentVideoIdRef.current) {
+        // Bloqueamos al cambiar video porque el player nuevo disparará eventos de carga
+        blockEmissions(2000);
         setVideoId(videoId);
         setIsSynced(true); 
       }
@@ -184,8 +187,9 @@ function Room() {
     const handleSetTime = ({ time, state, videoId: incomingVideoId }) => {
       console.log(`📥 Received sync`);
       
-      // 🔒 Raise flag for initial sync too
-      isRemoteUpdate.current = true;
+      // 🔒 CRÍTICO: El nuevo usuario recibe datos. 
+      // Bloqueamos sus emisiones inmediatamente para que su "carga" no pause a los demás.
+      blockEmissions(2500); 
 
       if (incomingVideoId && incomingVideoId !== currentVideoIdRef.current) {
          setVideoId(incomingVideoId);
@@ -193,16 +197,15 @@ function Room() {
 
       const player = playerRef.current;
       if (player) {
+        // Intentamos sincronizar
         player.seekTo(time, true);
-        if (state === 1) player.playVideo();
-        else player.pauseVideo();
+        if (state === 1) {
+            player.playVideo();
+        } else {
+            player.pauseVideo();
+        }
         setIsSynced(true);
       }
-
-      // 🔒 Lower flag
-      setTimeout(() => {
-        isRemoteUpdate.current = false;
-      }, 1000); // Longer timeout for initial sync/seek
     };
 
     socket.on('change-video', handleChangeVideo);
@@ -272,14 +275,9 @@ function Room() {
           {/* Video Container */}
           <div className="w-full max-w-6xl mx-auto p-4 lg:p-6 pb-0">
             <div className="relative group w-full aspect-video rounded-xl shadow-2xl bg-black overflow-hidden border border-white/10">
-              
-              {/* Video Background */}
               <div className="absolute inset-0 bg-[#0a0a0a] z-0"></div>
-
-              {/* Conditional Content */}
               <div className="relative w-full h-full z-10">
                 {videoId ? (
-                    /* IF VIDEO EXISTS */
                     <>
                         <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl blur-2xl opacity-20 group-hover:opacity-30 transition duration-1000 pointer-events-none"></div>
                         <VideoPlayer
@@ -287,9 +285,13 @@ function Room() {
                             playerRef={playerRef}
                             isSynced={isSynced}
                             onEvent={(type, currentTime) => {
-                                // 🔒 CRITICAL: Only emit if it's NOT a remote update
-                                if (isSynced && !isRemoteUpdate.current) {
+                                // 🔒 LÓGICA DE ENVÍO CORREGIDA
+                                // Si estamos "Synced" Y NO tenemos el candado activado, enviamos.
+                                if (isSynced && !blockEventsRef.current) {
+                                    console.log(`📡 Emitting event: ${type}`);
                                     socket.emit('video-event', { roomId, type, currentTime });
+                                } else {
+                                    console.log(`🛡️ Blocked emission: ${type} (Auto-syncing)`);
                                 }
                             }}
                             onReady={handlePlayerReady}
@@ -297,7 +299,6 @@ function Room() {
                         />
                     </>
                 ) : (
-                    /* NO VIDEO */
                     <div className="flex flex-col items-center justify-center h-full w-full text-gray-500 bg-[#0a0a0a]">
                         <div className="p-6 bg-white/5 rounded-full mb-6 animate-pulse ring-1 ring-white/10">
                              <Play size={48} className="text-purple-500 ml-1" fill="currentColor" />
@@ -311,7 +312,6 @@ function Room() {
               </div>
             </div>
             
-            {/* Video Info */}
             <div className="mt-5 mb-8 px-1">
                 <h2 className="text-xl md:text-2xl font-bold text-white flex items-start gap-3 leading-tight">
                     <Tv size={24} className={`mt-1 flex-shrink-0 ${videoId ? 'text-purple-500' : 'text-gray-600'}`} />
@@ -328,11 +328,7 @@ function Room() {
             </div>
           </div>
 
-          {/* Results Carousel */}
-          <div 
-            ref={resultsRef} 
-            className="w-full max-w-6xl mx-auto px-4 lg:px-6 pb-12 scroll-mt-24" 
-          >
+          <div ref={resultsRef} className="w-full max-w-6xl mx-auto px-4 lg:px-6 pb-12 scroll-mt-24">
             {videos && videos.length > 0 && (
                 <div className="flex items-center justify-between mb-4 animate-fade-in">
                     <h3 className="text-lg font-semibold text-gray-200 border-l-4 border-purple-500 pl-3">
@@ -354,7 +350,6 @@ function Room() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN (Chat) */}
         {user && (
           <div className={`
             fixed inset-y-0 right-0 w-80 bg-[#151515] border-l border-white/10 transform transition-transform duration-300 z-30 shadow-2xl
